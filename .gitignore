@@ -1,0 +1,8 @@
+# Potentially bigquery keyfiles
+pyethlib-*.json
+
+# Currently using for testing and developing the lib
+dev.py
+
+*.db
+__pycache__/
