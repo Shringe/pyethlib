@@ -1,6 +1,8 @@
 from dataclasses import dataclass
+from pathlib import Path
 import sqlite3
 from typing import List, Optional
+
 
 BIGQUERY_MOCK_DATASET = "bigquery-public-data.goog_blockchain_ethereum_goerli_us"
 BIGQUERY_REAL_DATASET = "bigquery-public-data.goog_blockchain_ethereum_mainnet_us"
@@ -12,11 +14,14 @@ class Query:
     'Format: "YYYY-MM-DD". Will get everything past this date, inclusive'
     ending_date: Optional[str] = None
     'Format: "YYYY-MM-DD". Will get everything up until this date, inclusive'
-
-    dataset: str = BIGQUERY_MOCK_DATASET
-    table: str = "receipts"
     limit: Optional[int] = 100
+    "The maximum amount of entries to grab"
+    dataset: str = BIGQUERY_REAL_DATASET
+    "The Google BigQuery ethereum dataset to use"
+    table: str = "receipts"
+    "The table to get data from. Not recommended to change"
     fields: List[str] | str = "*"
+    "The list of fields to grab from the table. Not recommended to change"
 
     def to_sql(self) -> str:
         if type(self.fields) is str:
@@ -54,18 +59,37 @@ class Query:
 
 
 class Database:
-    def __init__(self, path: str) -> None:
-        self.conn = sqlite3.connect(path)
+    def __init__(
+        self, dataset_name: str = "pyethlib", path: str = "pyethlib.db"
+    ) -> None:
+        self.path = Path(path)
+        self.dataset_name = dataset_name
+        self._open()
+
+    def _open(self) -> None:
+        "Opens the database. This is called automatically in the constructor"
+        self.conn = sqlite3.connect(self.path)
+
+    def reset(self) -> None:
+        "Completely wipes the database and creates a new empty one"
+        self.close()
+        self.delete()
+        self._open()
+        self.create()
 
     def close(self) -> None:
         "Closes the database. Call this once you are done with the data"
         self.conn.commit()
         self.conn.close()
 
+    def delete(self) -> None:
+        "Simply deletes the database file"
+        self.path.unlink()
+
     def create(self) -> None:
         "Creates the database"
-        self.conn.execute("""
-            CREATE TABLE IF NOT EXISTS pyethlib (
+        self.conn.execute(f"""
+            CREATE TABLE IF NOT EXISTS {self.dataset_name} (
                 block_hash          TEXT,
                 block_number        INTEGER,
                 block_timestamp     DATETIME,
@@ -84,11 +108,11 @@ class Database:
         """)
 
     def save_query_results(self, results) -> None:
-        "Saves the results from bigquery.Client.query() into the database"
+        "Saves the results from bigquery.Client.query_and_wait() into the database"
         cursor = self.conn.cursor()
         for row in results:
             cursor.execute(
-                """INSERT OR REPLACE INTO pyethlib VALUES (
+                f"""INSERT OR REPLACE INTO {self.dataset_name} VALUES (
                     :block_hash, :block_number, :block_timestamp, :transaction_hash,
                     :transaction_index, :from_address, :to_address, :contract_address,
                     :cumulative_gas_used, :gas_used, :effective_gas_price,
