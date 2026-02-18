@@ -1,8 +1,10 @@
-# Potentially bigquery keyfiles
+# Potential secrets
 pyethlib-*.json
+cryptocompare_keyfile.txt
 
 # Currently using for testing and developing the lib
 dev.py
 
 *.db
 __pycache__/
+venv/
