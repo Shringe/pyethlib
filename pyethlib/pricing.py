@@ -12,6 +12,10 @@ def truncate_hour(dt: datetime) -> datetime:
     return dt.replace(minute=0, second=0, microsecond=0)
 
 
+def num_hours_between_dates(dt1: datetime, dt2: datetime) -> int:
+    return int(abs((dt2 - dt1).total_seconds() // 3600))
+
+
 @dataclass
 class PricingEntry:
     open: float
@@ -50,12 +54,24 @@ class PricingData:
         self.api_key = keyfile.read_text()
 
     def get_hourly_pricing(
-        self, limit: int, final_hour: datetime
+        self, starting_hour: datetime, ending_hour: datetime
     ) -> HourlyPriceHistory:
         """
         Returns a dictionary of hours to PricingEntrys.
-        Limit is the number of hours to get prior to and including final_hour.
+        Timezone is UTC.
         """
+
+        starting_hour = truncate_hour(starting_hour)
+        ending_hour = truncate_hour(ending_hour)
+        requested_limit = num_hours_between_dates(ending_hour, starting_hour)
+
+        # The api doesn't like limits less than one
+        if requested_limit == 0:
+            only_get_one_entry = True
+            true_limit = 1
+        else:
+            only_get_one_entry = False
+            true_limit = requested_limit
 
         url = "https://min-api.cryptocompare.com/data/v2/histohour"
         pricing_history = HourlyPriceHistory()
@@ -63,23 +79,26 @@ class PricingData:
         parameters = {
             "fsym": "ETH",
             "tsym": "USD",
-            "limit": limit,
-            "toTs": truncate_hour(final_hour).timestamp(),
+            "limit": true_limit,
+            "toTs": ending_hour.timestamp(),
             "api_key": self.api_key,
         }
 
         response = requests.get(url, params=parameters)
         result = response.json()
 
-        for raw in result["Data"]["Data"]:
-            dt = datetime.utcfromtimestamp(raw["time"])
+        for entry in result["Data"]["Data"]:
+            dt = datetime.utcfromtimestamp(entry["time"])
             pricing_entry = PricingEntry(
-                float(raw["open"]),
-                float(raw["close"]),
-                float(raw["high"]),
-                float(raw["low"]),
+                float(entry["open"]),
+                float(entry["close"]),
+                float(entry["high"]),
+                float(entry["low"]),
             )
 
             pricing_history[dt] = pricing_entry
+
+            if only_get_one_entry:
+                break
 
         return pricing_history
