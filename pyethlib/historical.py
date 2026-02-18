@@ -1,7 +1,9 @@
 from dataclasses import dataclass
 from pathlib import Path
-import sqlite3
 from typing import List, Optional
+from pyethlib.pricing import PricingEntry
+import datetime
+import sqlite3
 
 
 BIGQUERY_MOCK_DATASET = "bigquery-public-data.goog_blockchain_ethereum_goerli_us"
@@ -58,65 +60,59 @@ class Query:
         return "\n".join(parameters)
 
 
-class Database:
-    def __init__(
-        self, dataset_name: str = "pyethlib", path: str = "pyethlib.db"
-    ) -> None:
-        self.path = Path(path)
-        self.dataset_name = dataset_name
-        self._open()
+@dataclass
+class ReceiptsEntry:
+    "Receipts table entry, with added pricing data"
 
-    def _open(self) -> None:
-        "Opens the database. This is called automatically in the constructor"
-        self.conn = sqlite3.connect(self.path)
+    block_hash: str
+    block_number: int
+    block_timestamp: datetime.datetime
+    transaction_hash: str
+    transaction_index: int
+    from_address: str
+    to_address: Optional[str]
+    contract_address: Optional[str]
+    cumulative_gas_used: int
+    gas_used: int
+    effective_gas_price: int
+    logs_bloom: str
+    root: Optional[str]
+    status: Optional[int]
 
-    def reset(self) -> None:
-        "Completely wipes the database and creates a new empty one"
-        self.close()
-        self.delete()
-        self._open()
-        self.create()
+    pricing_open: Optional[float] = None
+    pricing_closed: Optional[float] = None
+    pricing_high: Optional[float] = None
+    pricing_low: Optional[float] = None
 
-    def close(self) -> None:
-        "Closes the database. Call this once you are done with the data"
-        self.conn.commit()
-        self.conn.close()
+    def set_pricing(self, pricing: PricingEntry) -> None:
+        self.pricing_open = pricing.open
+        self.pricing_closed = pricing.closed
+        self.pricing_high = pricing.high
+        self.pricing_low = pricing.low
 
-    def delete(self) -> None:
-        "Simply deletes the database file"
-        self.path.unlink()
+    def get_pricing(self) -> PricingEntry:
+        return PricingEntry(
+            self.pricing_open,  # pyright: ignore[reportArgumentType]
+            self.pricing_closed,  # pyright: ignore[reportArgumentType]
+            self.pricing_high,  # pyright: ignore[reportArgumentType]
+            self.pricing_low,  # pyright: ignore[reportArgumentType]
+        )
 
-    def create(self) -> None:
-        "Creates the database"
-        self.conn.execute(f"""
-            CREATE TABLE IF NOT EXISTS {self.dataset_name} (
-                block_hash          TEXT,
-                block_number        INTEGER,
-                block_timestamp     DATETIME,
-                transaction_hash    TEXT PRIMARY KEY,
-                transaction_index   INTEGER,
-                from_address        TEXT,
-                to_address          TEXT,
-                contract_address    TEXT,
-                cumulative_gas_used INTEGER,
-                gas_used            INTEGER,
-                effective_gas_price INTEGER,
-                logs_bloom          TEXT,
-                root                TEXT,
-                status              INTEGER
-            )
-        """)
-
-    def save_query_results(self, results) -> None:
-        "Saves the results from bigquery.Client.query_and_wait() into the database"
-        cursor = self.conn.cursor()
-        for row in results:
-            cursor.execute(
-                f"""INSERT OR REPLACE INTO {self.dataset_name} VALUES (
-                    :block_hash, :block_number, :block_timestamp, :transaction_hash,
-                    :transaction_index, :from_address, :to_address, :contract_address,
-                    :cumulative_gas_used, :gas_used, :effective_gas_price,
-                    :logs_bloom, :root, :status
-                )""",
-                dict(row),
-            )
+    @classmethod
+    def from_dict(cls, d: dict) -> "ReceiptsEntry":
+        return cls(
+            block_hash=d["block_hash"],
+            block_number=d["block_number"],
+            block_timestamp=d["block_timestamp"],
+            transaction_hash=d["transaction_hash"],
+            transaction_index=d["transaction_index"],
+            from_address=d["from_address"],
+            to_address=d.get("to_address"),
+            contract_address=d.get("contract_address"),
+            cumulative_gas_used=d["cumulative_gas_used"],
+            gas_used=d["gas_used"],
+            effective_gas_price=d["effective_gas_price"],
+            logs_bloom=d["logs_bloom"],
+            root=d.get("root"),
+            status=d.get("status"),
+        )

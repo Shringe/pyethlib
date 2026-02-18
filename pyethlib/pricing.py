@@ -1,6 +1,6 @@
 from collections.abc import MutableMapping
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, UTC
 from pathlib import Path
 from typing import Dict, Iterator
 
@@ -9,7 +9,7 @@ import requests
 
 def truncate_hour(dt: datetime) -> datetime:
     "Truncates a timestamp to the beginning of the hour"
-    return dt.replace(minute=0, second=0, microsecond=0)
+    return dt.replace(minute=0, second=0, microsecond=0, tzinfo=UTC)
 
 
 def num_hours_between_dates(dt1: datetime, dt2: datetime) -> int:
@@ -19,7 +19,7 @@ def num_hours_between_dates(dt1: datetime, dt2: datetime) -> int:
 @dataclass
 class PricingEntry:
     open: float
-    close: float
+    closed: float
     high: float
     low: float
 
