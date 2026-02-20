@@ -29,6 +29,7 @@
               pypkgs: with pypkgs; [
                 google-cloud-bigquery
                 packaging # Needed for bigquery
+                whenever
               ]
             ))
           ];

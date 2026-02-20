@@ -1,9 +1,8 @@
 from dataclasses import dataclass
-from pathlib import Path
 from typing import List, Optional
+
+from whenever import Instant, Date
 from pyethlib.pricing import PricingEntry
-import datetime
-import sqlite3
 
 
 BIGQUERY_MOCK_DATASET = "bigquery-public-data.goog_blockchain_ethereum_goerli_us"
@@ -12,9 +11,9 @@ BIGQUERY_REAL_DATASET = "bigquery-public-data.goog_blockchain_ethereum_mainnet_u
 
 @dataclass
 class Query:
-    starting_date: Optional[str] = None
+    starting_date: Optional[Date] = None
     'Format: "YYYY-MM-DD". Will get everything past this date, inclusive'
-    ending_date: Optional[str] = None
+    ending_date: Optional[Date] = None
     'Format: "YYYY-MM-DD". Will get everything up until this date, inclusive'
     limit: Optional[int] = 100
     "The maximum amount of entries to grab"
@@ -37,21 +36,19 @@ class Query:
 
         if self.starting_date:
             parameters.append(
-                f'WHERE block_timestamp >= TIMESTAMP("{self.starting_date}")'
+                f'WHERE block_timestamp >= TIMESTAMP("{self.starting_date.format_common_iso()}")'
             )
 
         if self.ending_date:
             # Increment ending_date by one to make date inclusive, rather than exclusive
-            date_numbers = self.ending_date.split("-")
-            date_numbers[2] = str(int(date_numbers[2]) + 1)
-            ending_date_inclusive = "-".join(date_numbers)
+            ending_date_inclusive = self.ending_date.add(days=1)
             if self.starting_date:
                 parameters.append(
-                    f'AND block_timestamp < TIMESTAMP("{ending_date_inclusive}")'
+                    f'AND block_timestamp < TIMESTAMP("{ending_date_inclusive.format_common_iso()}")'
                 )
             else:
                 parameters.append(
-                    f'WHERE block_timestamp < TIMESTAMP("{ending_date_inclusive}")'
+                    f'WHERE block_timestamp < TIMESTAMP("{ending_date_inclusive.format_common_iso()}")'
                 )
 
         if self.limit:
@@ -66,7 +63,7 @@ class ReceiptsEntry:
 
     block_hash: str
     block_number: int
-    block_timestamp: datetime.datetime
+    block_timestamp: Instant
     transaction_hash: str
     transaction_index: int
     from_address: str
@@ -103,7 +100,7 @@ class ReceiptsEntry:
         return cls(
             block_hash=d["block_hash"],
             block_number=d["block_number"],
-            block_timestamp=d["block_timestamp"],
+            block_timestamp=Instant.from_py_datetime(d["block_timestamp"]),
             transaction_hash=d["transaction_hash"],
             transaction_index=d["transaction_index"],
             from_address=d["from_address"],

@@ -1,4 +1,3 @@
-import datetime
 import sqlite3
 from google.cloud import bigquery
 from pyethlib.historical import Query, ReceiptsEntry
@@ -29,17 +28,12 @@ class MasterClient:
             entry = ReceiptsEntry.from_dict(dict(row))
             self.dataset.append(entry)
 
-    def fetch_pricing_data(self, query: Query) -> None:
-        start = datetime.datetime.combine(
-            datetime.date.fromisoformat(str(query.starting_date)),
-            datetime.time.min,
-            tzinfo=datetime.UTC,
-        )
-        end = datetime.datetime.combine(
-            datetime.date.fromisoformat(str(query.ending_date)),
-            datetime.time.max,
-            tzinfo=datetime.UTC,
-        )
+    def fetch_pricing_data(self, padding: int = 24) -> None:
+        first = self.dataset[0]
+        last = self.dataset[-1]
+
+        start = first.block_timestamp.subtract(hours=padding).round("hour")
+        end = last.block_timestamp.add(hours=padding).round("hour")
 
         price_history = self.cryptocompare_client.get_hourly_pricing(start, end)
 
@@ -122,7 +116,7 @@ class Database:
             (
                 row.block_hash,
                 row.block_number,
-                row.block_timestamp.isoformat(),
+                row.block_timestamp.py_datetime(),
                 row.transaction_hash,
                 row.transaction_index,
                 row.from_address,

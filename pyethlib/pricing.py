@@ -1,19 +1,15 @@
 from collections.abc import MutableMapping
 from dataclasses import dataclass
-from datetime import datetime, UTC
 from pathlib import Path
 from typing import Dict, Iterator
+from whenever import Instant
 
 import requests
 
 
-def truncate_hour(dt: datetime) -> datetime:
+def truncate_hour(dt: Instant) -> Instant:
     "Truncates a timestamp to the beginning of the hour"
-    return dt.replace(minute=0, second=0, microsecond=0, tzinfo=UTC)
-
-
-def num_hours_between_dates(dt1: datetime, dt2: datetime) -> int:
-    return int(abs((dt2 - dt1).total_seconds() // 3600))
+    return dt.round("hour")
 
 
 @dataclass
@@ -28,18 +24,18 @@ class HourlyPriceHistory(MutableMapping):
     """A dictionary of hour timestamps mapped to price histories"""
 
     def __init__(self) -> None:
-        self._history: Dict[datetime, PricingEntry] = {}
+        self._history: Dict[Instant, PricingEntry] = {}
 
-    def __setitem__(self, dt: datetime, entry: PricingEntry) -> None:
-        self._history[truncate_hour(dt)] = entry
+    def __setitem__(self, dt: Instant, entry: PricingEntry) -> None:
+        self._history[dt.round("hour")] = entry
 
-    def __getitem__(self, dt: datetime) -> PricingEntry:
-        return self._history[truncate_hour(dt)]
+    def __getitem__(self, dt: Instant) -> PricingEntry:
+        return self._history[dt.round("hour")]
 
-    def __delitem__(self, dt: datetime) -> None:
-        del self._history[truncate_hour(dt)]
+    def __delitem__(self, dt: Instant) -> None:
+        del self._history[dt.round("hour")]
 
-    def __iter__(self) -> Iterator[datetime]:
+    def __iter__(self) -> Iterator[Instant]:
         return self._history.__iter__()
 
     def __len__(self) -> int:
@@ -54,16 +50,16 @@ class PricingData:
         self.api_key = keyfile.read_text()
 
     def get_hourly_pricing(
-        self, starting_hour: datetime, ending_hour: datetime
+        self, starting_hour: Instant, ending_hour: Instant
     ) -> HourlyPriceHistory:
         """
         Returns a dictionary of hours to PricingEntrys.
         Timezone is UTC.
         """
 
-        starting_hour = truncate_hour(starting_hour)
-        ending_hour = truncate_hour(ending_hour)
-        requested_limit = num_hours_between_dates(ending_hour, starting_hour)
+        starting_hour = starting_hour.round("hour")
+        ending_hour = ending_hour.round("hour")
+        requested_limit = int((ending_hour - starting_hour).in_hours())
 
         # The api doesn't like limits less than one
         if requested_limit == 0:
@@ -88,7 +84,7 @@ class PricingData:
         result = response.json()
 
         for entry in result["Data"]["Data"]:
-            dt = datetime.utcfromtimestamp(entry["time"])
+            dt = Instant.from_timestamp(entry["time"])
             pricing_entry = PricingEntry(
                 float(entry["open"]),
                 float(entry["close"]),
