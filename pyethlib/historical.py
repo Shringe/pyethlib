@@ -1,7 +1,8 @@
 from dataclasses import dataclass
 from typing import List, Optional
 
-from whenever import Instant, Date
+from whenever import Instant
+
 from pyethlib.pricing import PricingEntry
 
 

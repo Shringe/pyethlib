@@ -1,9 +1,11 @@
 import sqlite3
+from pathlib import Path
+from typing import List, Optional
+
 from google.cloud import bigquery
+
 from pyethlib.historical import Query, ReceiptsEntry
 from pyethlib.pricing import PricingData
-from typing import List, Optional
-from pathlib import Path
 
 
 class MasterClient:
@@ -16,29 +18,36 @@ class MasterClient:
         else:
             self._cryptocompare_keyfile = "/dev/null"
 
-        self.bigquery_client = bigquery.Client.from_service_account_json(
+        self._bigquery_client = bigquery.Client.from_service_account_json(
             self._bigquery_keyfile
         )
-        self.cryptocompare_client = PricingData(Path(self._cryptocompare_keyfile))
+        self._cryptocompare_client = PricingData(Path(self._cryptocompare_keyfile))
         self.dataset: List[ReceiptsEntry] = []
 
     def fetch_historical_data(self, query: Query) -> None:
-        rows = self.bigquery_client.query_and_wait(query.to_sql())
+        rows = self._bigquery_client.query_and_wait(query.to_sql())
         for row in rows:
             entry = ReceiptsEntry.from_dict(dict(row))
             self.dataset.append(entry)
+        self.dataset.sort(key=lambda entry: entry.block_timestamp)
 
-    def fetch_pricing_data(self, padding: int = 24) -> None:
+    def fetch_pricing_data(self, padding: int = 0) -> None:
         first = self.dataset[0]
         last = self.dataset[-1]
 
         start = first.block_timestamp.subtract(hours=padding).round("hour")
         end = last.block_timestamp.add(hours=padding).round("hour")
 
-        price_history = self.cryptocompare_client.get_hourly_pricing(start, end)
+        price_history = self._cryptocompare_client.get_hourly_pricing(start, end)
 
         for i, receipt in enumerate(self.dataset):
-            pricing_entry = price_history[receipt.block_timestamp]
+            try:
+                pricing_entry = price_history[receipt.block_timestamp]
+            except KeyError:
+                raise KeyError(
+                    "Failed to fetch pricing data for a specific block. Try increasing the `padding` parameter"
+                )
+
             self.dataset[i].set_pricing(pricing_entry)
 
     def save_to_sqlite(self, db_path: str) -> None:

@@ -2,14 +2,9 @@ from collections.abc import MutableMapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, Iterator
-from whenever import Instant
 
 import requests
-
-
-def truncate_hour(dt: Instant) -> Instant:
-    "Truncates a timestamp to the beginning of the hour"
-    return dt.round("hour")
+from whenever import Instant
 
 
 @dataclass
