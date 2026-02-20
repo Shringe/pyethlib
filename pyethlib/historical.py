@@ -16,12 +16,14 @@ class Query:
     Fields prefixed with with _underscore are not recommended to change.
     """
 
-    starting_date: Optional[Date] = None
-    "Will get everything past this date, inclusive"
-    ending_date: Optional[Date] = None
-    "Will get everything up until this date, inclusive"
-    limit: Optional[int] = 100
-    "The maximum amount of entries to grab"
+    start: Optional[Instant] = None
+    "Will get everything past this instant"
+    end: Optional[Instant] = None
+    "Will get everything up until this instant"
+    max_entries: Optional[int] = 1000
+    "The maximum amount of total entries to grab"
+    entries_per_hour: Optional[int] = 10
+    "The maximum amount of entries to grab at each hour"
     dataset: str = BIGQUERY_REAL_DATASET
     "The Google BigQuery ethereum dataset to use"
     _table: str = "receipts"
@@ -39,25 +41,31 @@ class Query:
         parameters.append(f"SELECT {fields}")
         parameters.append(f"FROM `{self.dataset}.{self._table}`")
 
-        if self.starting_date:
-            parameters.append(
-                f'WHERE block_timestamp >= TIMESTAMP("{self.starting_date.format_common_iso()}")'
+        where_clauses: List[str] = []
+
+        if self.start:
+            where_clauses.append(
+                f'block_timestamp >= TIMESTAMP("{self.start.round("microsecond").format_common_iso()}")'
             )
 
-        if self.ending_date:
-            # Increment ending_date by one to make date inclusive, rather than exclusive
-            ending_date_inclusive = self.ending_date.add(days=1)
-            if self.starting_date:
-                parameters.append(
-                    f'AND block_timestamp < TIMESTAMP("{ending_date_inclusive.format_common_iso()}")'
-                )
-            else:
-                parameters.append(
-                    f'WHERE block_timestamp < TIMESTAMP("{ending_date_inclusive.format_common_iso()}")'
-                )
+        if self.end:
+            where_clauses.append(
+                f'block_timestamp < TIMESTAMP("{self.end.round("microsecond").format_common_iso()}")'
+            )
 
-        if self.limit:
-            parameters.append(f"LIMIT {self.limit}")
+        if where_clauses:
+            parameters.append("WHERE " + "\nAND ".join(where_clauses))
+
+        if self.entries_per_hour:
+            parameters.append(
+                "QUALIFY ROW_NUMBER() OVER "
+                "(PARTITION BY TIMESTAMP_TRUNC(block_timestamp, HOUR) "
+                "ORDER BY block_timestamp) "
+                f"<= {self.entries_per_hour}"
+            )
+
+        if self.max_entries:
+            parameters.append(f"LIMIT {self.max_entries}")
 
         return "\n".join(parameters)
 
