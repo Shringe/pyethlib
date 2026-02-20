@@ -8,3 +8,4 @@ dev.py
 *.db
 __pycache__/
 venv/
+result
