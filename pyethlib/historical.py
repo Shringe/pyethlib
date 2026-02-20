@@ -11,28 +11,33 @@ BIGQUERY_REAL_DATASET = "bigquery-public-data.goog_blockchain_ethereum_mainnet_u
 
 @dataclass
 class Query:
+    """
+    Dataclass to format and retrieve SQL data from Google's BigQuery datasets.
+    Fields prefixed with with _underscore are not recommended to change.
+    """
+
     starting_date: Optional[Date] = None
-    'Format: "YYYY-MM-DD". Will get everything past this date, inclusive'
+    "Will get everything past this date, inclusive"
     ending_date: Optional[Date] = None
-    'Format: "YYYY-MM-DD". Will get everything up until this date, inclusive'
+    "Will get everything up until this date, inclusive"
     limit: Optional[int] = 100
     "The maximum amount of entries to grab"
     dataset: str = BIGQUERY_REAL_DATASET
     "The Google BigQuery ethereum dataset to use"
-    table: str = "receipts"
+    _table: str = "receipts"
     "The table to get data from. Not recommended to change"
-    fields: List[str] | str = "*"
+    _fields: List[str] | str = "*"
     "The list of fields to grab from the table. Not recommended to change"
 
     def to_sql(self) -> str:
-        if type(self.fields) is str:
-            fields = self.fields
+        if type(self._fields) is str:
+            fields = self._fields
         else:
-            fields = ", ".join(self.fields)
+            fields = ", ".join(self._fields)
 
         parameters: List[str] = []
         parameters.append(f"SELECT {fields}")
-        parameters.append(f"FROM `{self.dataset}.{self.table}`")
+        parameters.append(f"FROM `{self.dataset}.{self._table}`")
 
         if self.starting_date:
             parameters.append(
@@ -59,7 +64,7 @@ class Query:
 
 @dataclass
 class ReceiptsEntry:
-    "Receipts table entry, with added pricing data"
+    "Receipts table entry, with fields for tacking on pricing data"
 
     block_hash: str
     block_number: int
